@@ -2,11 +2,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Permissions required for overlay and internet access -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <application
         android:allowBackup="true"
@@ -19,7 +19,6 @@
         android:theme="@style/Theme.TelegramTranslator"
         tools:targetApi="34">
 
-        <!-- Main Configuration Activity -->
         <activity
             android:name=".MainActivity"
             android:exported="true">
@@ -29,7 +28,6 @@
             </intent-filter>
         </activity>
 
-        <!-- Accessibility Service for detecting and reading Telegram messages -->
         <service
             android:name=".service.TelegramAccessibilityService"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
@@ -43,10 +41,14 @@
                 android:resource="@xml/accessibility_service_config" />
         </service>
 
-        <!-- Optional background Overlay Service -->
         <service
             android:name=".service.OverlayService"
-            android:exported="false" />
+            android:foregroundServiceType="specialUse"
+            android:exported="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Floating translation overlay for screen accessibility" />
+        </service>
 
     </application>
 
