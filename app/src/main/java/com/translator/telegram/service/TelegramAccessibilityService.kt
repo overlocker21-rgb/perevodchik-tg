@@ -1,10 +1,9 @@
 package com.translator.telegram.service
 
 import android.accessibilityservice.AccessibilityService
-import android.os.Handler
-import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import com.translator.telegram.overlay.OverlayWindowManager
 import com.translator.telegram.translation.TranslationRepository
 import kotlinx.coroutines.CoroutineScope
@@ -15,7 +14,6 @@ import kotlinx.coroutines.launch
 class TelegramAccessibilityService : AccessibilityService() {
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
-    private val mainHandler = Handler(Looper.getMainLooper())
     private var overlayManager: OverlayWindowManager? = null
 
     companion object {
@@ -29,21 +27,12 @@ class TelegramAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
-        overlayManager = OverlayWindowManager(this).apply {
-            onBubbleClickListener = {
-                scanAndTranslateCurrentScreen()
-            }
-        }
+        overlayManager = OverlayWindowManager(this)
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // Can optionally listen to new incoming messages and trigger auto-translation
-        // For battery and performance efficiency, the primary trigger is user interaction (bubble)
-    }
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
 
-    override fun onInterrupt() {
-        // Handle interruption
-    }
+    override fun onInterrupt() {}
 
     override fun onDestroy() {
         super.onDestroy()
@@ -62,41 +51,45 @@ class TelegramAccessibilityService : AccessibilityService() {
         overlayManager?.hideTranslationPopup()
     }
 
-    /**
-     * Scans currently visible screen content in Telegram (or current app),
-     * extracts text nodes, sends them to translation API and shows overlay.
-     */
-    fun scanAndTranslateCurrentScreen() {
-        val rootNode = rootInActiveWindow ?: return
-        val extractedTexts = mutableListOf<String>()
+    fun scanAndTranslateCurrentScreen(onComplete: (List<Pair<String, String>>) -> Unit) {
+        val rootNode = rootInActiveWindow
+            ?: windows.firstOrNull { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }?.root
 
-        extractTextFromNode(rootNode, extractedTexts)
-        rootNode.recycle()
-
-        // Filter: Keep meaningful sentences, discard single characters, timestamps, etc.
-        val foreignTexts = extractedTexts
-            .map { it.trim() }
-            .filter { text ->
-                text.length >= 2 &&
-                !isTimestampOrTime(text) &&
-                !TranslationRepository.isAlreadyRussian(text)
-            }
-            .distinct()
-
-        if (foreignTexts.isEmpty()) {
-            overlayManager?.showTranslationPopup(emptyList(), isLoading = false)
+        if (rootNode == null) {
+            onComplete(listOf("Экран недоступен" to "Откройте чат Telegram на экране."))
             return
         }
 
-        // Show loading popup
-        overlayManager?.showTranslationPopup(emptyList(), isLoading = true)
+        val extractedTexts = mutableListOf<String>()
+        extractTextFromNode(rootNode, extractedTexts)
+
+        val candidates = extractedTexts
+            .map { it.trim() }
+            .filter { text ->
+                text.length >= 2 && !isTimestampOrTime(text)
+            }
+            .distinct()
+
+        if (candidates.isEmpty()) {
+            onComplete(listOf("Сообщения не найдены" to "На экране не обнаружено текстовых сообщений."))
+            return
+        }
+
+        val foreignTexts = candidates.filter { text ->
+            !TranslationRepository.isAlreadyRussian(text)
+        }
+
+        if (foreignTexts.isEmpty()) {
+            onComplete(listOf("Все сообщения на русском" to "На текущем экране нет сообщений на иностранном языке."))
+            return
+        }
 
         serviceScope.launch {
             val translationsMap = TranslationRepository.translateBatch(foreignTexts)
             val results = foreignTexts.map { text ->
                 text to (translationsMap[text] ?: text)
             }
-            overlayManager?.showTranslationPopup(results, isLoading = false)
+            onComplete(results)
         }
     }
 
@@ -106,9 +99,13 @@ class TelegramAccessibilityService : AccessibilityService() {
     ) {
         if (node == null) return
 
-        val text = node.text?.toString()
-        if (!text.isNullOrBlank()) {
+        val text = node.text?.toString()?.trim()
+        val desc = node.contentDescription?.toString()?.trim()
+
+        if (!text.isNullOrEmpty()) {
             resultList.add(text)
+        } else if (!desc.isNullOrEmpty()) {
+            resultList.add(desc)
         }
 
         val childCount = node.childCount
@@ -116,13 +113,14 @@ class TelegramAccessibilityService : AccessibilityService() {
             val child = node.getChild(i)
             if (child != null) {
                 extractTextFromNode(child, resultList)
-                child.recycle()
+                try {
+                    child.recycle()
+                } catch (e: Exception) {}
             }
         }
     }
 
     private fun isTimestampOrTime(text: String): Boolean {
-        // Simple regex check for timestamps like "14:20", "2:30 PM", "09:15"
         val timeRegex = Regex("^\\d{1,2}:\\d{2}(\\s?(AM|PM|am|pm))?$")
         return timeRegex.matches(text) || text.all { it.isDigit() || it == ':' || it == '.' }
     }
