@@ -35,12 +35,18 @@ class OverlayService : Service() {
             onBubbleClickListener = {
                 val accessibilityService = TelegramAccessibilityService.instance
                 if (accessibilityService != null) {
-                    accessibilityService.scanAndTranslateCurrentScreen()
+                    // Show loading popup immediately
+                    showTranslationPopup(emptyList(), isLoading = true)
+                    
+                    // Scan Telegram screen and display results
+                    accessibilityService.scanAndTranslateCurrentScreen { results ->
+                        showTranslationPopup(results, isLoading = false)
+                    }
                 } else {
                     showTranslationPopup(
                         listOf(
                             "Служба спец. возможностей выключена" to
-                            "Пожалуйста, включите службу в настройках приложения для чтения экрана Telegram."
+                            "Включите «TG Translator Overlay» в системных настройках спец. возможностей."
                         ),
                         isLoading = false
                     )
@@ -57,7 +63,11 @@ class OverlayService : Service() {
                 return START_NOT_STICKY
             }
             else -> {
-                startForeground(NOTIFICATION_ID, createNotification())
+                try {
+                    startForeground(NOTIFICATION_ID, createNotification())
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
                 overlayManager?.showBubble()
                 isRunning = true
             }

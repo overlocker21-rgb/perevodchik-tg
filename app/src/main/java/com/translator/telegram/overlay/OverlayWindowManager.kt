@@ -6,6 +6,8 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.PixelFormat
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.util.DisplayMetrics
 import android.view.ContextThemeWrapper
@@ -15,8 +17,6 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.ImageView
-import android.widget.LinearLayout
-import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import com.translator.telegram.R
@@ -28,16 +28,22 @@ class OverlayWindowManager(private val context: Context) {
     private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     private val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     private val inflater = LayoutInflater.from(themedContext)
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     private var bubbleView: View? = null
-    private var popupView: View? = null
+    private var pillView: View? = null
 
     private var bubbleParams: WindowManager.LayoutParams? = null
     private var isBubbleAttached = false
-    private var isPopupAttached = false
+    private var isPillAttached = false
+
+    private var autoDismissRunnable: Runnable? = null
 
     var onBubbleClickListener: (() -> Unit)? = null
 
+    /**
+     * Shows floating draggable liquid glass bubble button.
+     */
     @SuppressLint("ClickableViewAccessibility")
     fun showBubble() {
         if (isBubbleAttached || !Settings.canDrawOverlays(context)) return
@@ -122,12 +128,11 @@ class OverlayWindowManager(private val context: Context) {
                         (event.rawY - initialTouchY).toDouble()
                     )
 
-                    // Чёткое определение нажатия
+                    // Touch within 500ms and 45px distance is considered a click
                     if (duration < 500 && distance < 45.0) {
-                        Toast.makeText(context, "Ищу сообщения для перевода...", Toast.LENGTH_SHORT).show()
                         onBubbleClickListener?.invoke()
                     } else {
-                        // Прилипание к краю экрана при перетаскивании
+                        // Snap bubble to nearest screen edge (left or right)
                         params.x = if (params.x < screenWidth / 2) 20 else (screenWidth - 170).coerceAtLeast(20)
                         if (isBubbleAttached) {
                             try {
@@ -144,6 +149,9 @@ class OverlayWindowManager(private val context: Context) {
         }
     }
 
+    /**
+     * Removes floating bubble from screen.
+     */
     fun hideBubble() {
         if (!isBubbleAttached || bubbleView == null) return
         try {
@@ -155,101 +163,122 @@ class OverlayWindowManager(private val context: Context) {
         }
     }
 
-    fun showTranslationPopup(
-        translations: List<Pair<String, String>>,
-        isLoading: Boolean = false
+    /**
+     * Shows a compact liquid glass floating pill directly above the message.
+     * iOS 26 / Liquid Glass style.
+     */
+    fun showGlassPill(
+        fullText: String,
+        targetY: Int = 0
     ) {
         if (!Settings.canDrawOverlays(context)) return
 
-        if (!isPopupAttached || popupView == null) {
-            try {
-                popupView = inflater.inflate(R.layout.overlay_translation_popup, null)
-            } catch (e: Exception) {
-                e.printStackTrace()
-                return
-            }
+        // Hide previous pill if visible
+        hideGlassPill()
 
-            val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            } else {
-                @Suppress("DEPRECATION")
-                WindowManager.LayoutParams.TYPE_PHONE
-            }
+        try {
+            pillView = inflater.inflate(R.layout.overlay_glass_pill, null)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Toast.makeText(context, fullText, Toast.LENGTH_LONG).show()
+            return
+        }
 
-            val displayMetrics = DisplayMetrics()
+        val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        } else {
             @Suppress("DEPRECATION")
-            windowManager.defaultDisplay.getMetrics(displayMetrics)
-            val popupWidth = if (displayMetrics.widthPixels > 0) (displayMetrics.widthPixels * 0.92).toInt() else WindowManager.LayoutParams.MATCH_PARENT
+            WindowManager.LayoutParams.TYPE_PHONE
+        }
 
-            val popupParams = WindowManager.LayoutParams(
-                popupWidth,
-                WindowManager.LayoutParams.WRAP_CONTENT,
-                layoutFlag,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-                PixelFormat.TRANSLUCENT
-            ).apply {
-                gravity = Gravity.CENTER_HORIZONTAL or Gravity.TOP
-                y = 140
-            }
+        val displayMetrics = DisplayMetrics()
+        @Suppress("DEPRECATION")
+        windowManager.defaultDisplay.getMetrics(displayMetrics)
+        val screenHeight = displayMetrics.heightPixels
 
-            popupView?.findViewById<ImageView>(R.id.btnClosePopup)?.setOnClickListener {
-                hideTranslationPopup()
-            }
-
-            try {
-                windowManager.addView(popupView, popupParams)
-                isPopupAttached = true
-            } catch (e: Exception) {
-                e.printStackTrace()
-                return
+        // Position pill directly above the message bounds or neatly centered
+        val pillParams = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            layoutFlag,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.CENTER_HORIZONTAL or Gravity.TOP
+            y = when {
+                targetY > 200 -> (targetY - 140).coerceAtLeast(150)
+                targetY in 1..200 -> (targetY + 90)
+                else -> (screenHeight - 340).coerceAtLeast(200) // Near bottom above input bar
             }
         }
 
-        val progressBar = popupView?.findViewById<ProgressBar>(R.id.progressBar)
-        val container = popupView?.findViewById<LinearLayout>(R.id.translationsContainer)
-        val title = popupView?.findViewById<TextView>(R.id.tvPopupTitle)
+        val tvPillText = pillView?.findViewById<TextView>(R.id.tvPillText)
+        val btnCopy = pillView?.findViewById<ImageView>(R.id.btnPillCopy)
+        val btnClose = pillView?.findViewById<ImageView>(R.id.btnPillClose)
 
-        progressBar?.visibility = if (isLoading) View.VISIBLE else View.GONE
-        container?.removeAllViews()
+        tvPillText?.text = fullText
 
-        if (translations.isEmpty()) {
-            title?.text = if (isLoading) "Сканирование экрана..." else "Сообщений для перевода не найдено"
-        } else {
-            title?.text = "Переведено (${translations.size} сообщ.)"
+        // Tap on copy icon
+        btnCopy?.setOnClickListener {
+            val clip = ClipData.newPlainText("Translated message", fullText)
+            clipboard.setPrimaryClip(clip)
+            Toast.makeText(context, "Скопировано!", Toast.LENGTH_SHORT).show()
+        }
 
-            for ((orig, trans) in translations) {
-                try {
-                    val itemView = inflater.inflate(R.layout.item_translation, container, false)
-                    val tvOriginal = itemView.findViewById<TextView>(R.id.tvOriginal)
-                    val tvTranslated = itemView.findViewById<TextView>(R.id.tvTranslated)
-                    val btnCopy = itemView.findViewById<ImageView>(R.id.btnCopy)
+        // Tap on close icon
+        btnClose?.setOnClickListener {
+            hideGlassPill()
+        }
 
-                    tvOriginal.text = orig
-                    tvTranslated.text = trans
+        // Tap anywhere on the pill to copy & dismiss
+        pillView?.setOnClickListener {
+            val clip = ClipData.newPlainText("Translated message", fullText)
+            clipboard.setPrimaryClip(clip)
+            Toast.makeText(context, "Скопировано!", Toast.LENGTH_SHORT).show()
+            hideGlassPill()
+        }
 
-                    btnCopy?.setOnClickListener {
-                        val clip = ClipData.newPlainText("Translated message", trans)
-                        clipboard.setPrimaryClip(clip)
-                        Toast.makeText(context, "Скопировано в буфер!", Toast.LENGTH_SHORT).show()
-                    }
+        try {
+            windowManager.addView(pillView, pillParams)
+            isPillAttached = true
 
-                    container?.addView(itemView)
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
+            // Auto-dismiss pill after 9 seconds so it doesn't clutter the screen
+            autoDismissRunnable?.let { mainHandler.removeCallbacks(it) }
+            autoDismissRunnable = Runnable { hideGlassPill() }
+            mainHandler.postDelayed(autoDismissRunnable!!, 9000)
+
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    /**
+     * Hides the compact liquid glass pill.
+     */
+    fun hideGlassPill() {
+        autoDismissRunnable?.let { mainHandler.removeCallbacks(it) }
+        if (!isPillAttached || pillView == null) return
+        try {
+            windowManager.removeView(pillView)
+            isPillAttached = false
+            pillView = null
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    // Backwards compatibility alias
+    fun showTranslationPopup(translations: List<Pair<String, String>>, isLoading: Boolean = false) {
+        if (isLoading) {
+            Toast.makeText(context, "Сканирую экран Telegram...", Toast.LENGTH_SHORT).show()
+        } else if (translations.isNotEmpty()) {
+            val first = translations.first().second
+            showGlassPill(first)
         }
     }
 
     fun hideTranslationPopup() {
-        if (!isPopupAttached || popupView == null) return
-        try {
-            windowManager.removeView(popupView)
-            isPopupAttached = false
-            popupView = null
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        hideGlassPill()
     }
 
     fun isBubbleVisible(): Boolean = isBubbleAttached

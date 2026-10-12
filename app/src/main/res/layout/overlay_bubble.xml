@@ -7,15 +7,16 @@
     android:clickable="true"
     android:focusable="true">
 
+    <!-- Frosted Liquid Glass Floating Button (iOS 26 Style) -->
     <ImageView
         android:id="@+id/btnBubble"
-        android:layout_width="56dp"
-        android:layout_height="56dp"
-        android:background="@drawable/bg_bubble"
+        android:layout_width="54dp"
+        android:layout_height="54dp"
+        android:background="@drawable/bg_liquid_bubble"
         android:contentDescription="Translate"
-        android:elevation="8dp"
-        android:padding="12dp"
+        android:elevation="12dp"
+        android:padding="13dp"
         android:src="@drawable/ic_translate"
-        app:tint="@color/white" />
+        app:tint="#F0F8FF" />
 
 </FrameLayout>

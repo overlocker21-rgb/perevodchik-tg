@@ -1,9 +1,13 @@
 package com.translator.telegram.service
 
 import android.accessibilityservice.AccessibilityService
+import android.graphics.Rect
+import android.os.Handler
+import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
+import android.widget.Toast
 import com.translator.telegram.overlay.OverlayWindowManager
 import com.translator.telegram.translation.TranslationRepository
 import kotlinx.coroutines.CoroutineScope
@@ -14,7 +18,14 @@ import kotlinx.coroutines.launch
 class TelegramAccessibilityService : AccessibilityService() {
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
+    private val mainHandler = Handler(Looper.getMainLooper())
     private var overlayManager: OverlayWindowManager? = null
+
+    data class ScannedItem(
+        val text: String,
+        val top: Int,
+        val bottom: Int
+    )
 
     companion object {
         var instance: TelegramAccessibilityService? = null
@@ -38,7 +49,7 @@ class TelegramAccessibilityService : AccessibilityService() {
         super.onDestroy()
         instance = null
         overlayManager?.hideBubble()
-        overlayManager?.hideTranslationPopup()
+        overlayManager?.hideGlassPill()
         overlayManager = null
     }
 
@@ -48,78 +59,87 @@ class TelegramAccessibilityService : AccessibilityService() {
 
     fun hideFloatingBubble() {
         overlayManager?.hideBubble()
-        overlayManager?.hideTranslationPopup()
+        overlayManager?.hideGlassPill()
     }
 
+    /**
+     * Finds the latest foreign message on screen and shows a compact
+     * Liquid Glass pill right above it with the custom prefix.
+     */
     fun scanAndTranslateCurrentScreen(onComplete: ((List<Pair<String, String>>) -> Unit)? = null) {
         if (overlayManager == null) {
             overlayManager = OverlayWindowManager(this)
         }
 
-        // Показываем индикатор загрузки
-        overlayManager?.showTranslationPopup(emptyList(), isLoading = true)
+        val items = mutableListOf<ScannedItem>()
 
-        val rootNode = rootInActiveWindow
-            ?: windows.firstOrNull { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }?.root
+        // 1. Scan root in active window
+        rootInActiveWindow?.let { extractTextFromNode(it, items) }
 
-        if (rootNode == null) {
-            val errList = listOf("Экран недоступен" to "Откройте чат Telegram на экране.")
-            overlayManager?.showTranslationPopup(errList, isLoading = false)
-            onComplete?.invoke(errList)
-            return
-        }
-
-        val extractedTexts = mutableListOf<String>()
-        extractTextFromNode(rootNode, extractedTexts)
-
-        val candidates = extractedTexts
-            .map { it.trim() }
-            .filter { text ->
-                text.length >= 2 && !isTimestampOrTime(text)
+        // 2. Also scan accessible windows
+        try {
+            for (window in windows) {
+                if (window.type == AccessibilityWindowInfo.TYPE_APPLICATION) {
+                    window.root?.let { extractTextFromNode(it, items) }
+                }
             }
-            .distinct()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
 
-        if (candidates.isEmpty()) {
-            val emptyList = listOf("Сообщения не найдены" to "На экране не обнаружено текстовых сообщений.")
-            overlayManager?.showTranslationPopup(emptyList, isLoading = false)
-            onComplete?.invoke(emptyList)
+        val validItems = items
+            .map { ScannedItem(it.text.trim(), it.top, it.bottom) }
+            .filter { it.text.length >= 2 && !isTimestampOrTime(it.text) }
+
+        if (validItems.isEmpty()) {
+            mainHandler.post {
+                Toast.makeText(this, "Сообщения на экране не найдены", Toast.LENGTH_SHORT).show()
+            }
+            onComplete?.invoke(emptyList())
             return
         }
 
-        val foreignTexts = candidates.filter { text ->
-            !TranslationRepository.isAlreadyRussian(text)
-        }
+        val foreignItems = validItems.filter { !TranslationRepository.isAlreadyRussian(it.text) }
 
-        if (foreignTexts.isEmpty()) {
-            val rusList = listOf("Все сообщения на русском" to "На текущем экране нет сообщений на иностранном языке.")
-            overlayManager?.showTranslationPopup(rusList, isLoading = false)
-            onComplete?.invoke(rusList)
+        if (foreignItems.isEmpty()) {
+            mainHandler.post {
+                overlayManager?.showGlassPill("Все сообщения на русском")
+            }
+            onComplete?.invoke(listOf("Все сообщения на русском" to "На экране нет иностранного текста"))
             return
         }
+
+        // Pick the latest (lowest on screen) foreign message
+        val targetMessage = foreignItems.maxByOrNull { it.bottom } ?: foreignItems.last()
 
         serviceScope.launch {
-            val translationsMap = TranslationRepository.translateBatch(foreignTexts)
-            val results = foreignTexts.map { text ->
-                text to (translationsMap[text] ?: text)
+            val translated = TranslationRepository.translate(targetMessage.text)
+            val prefix = TranslationRepository.getPrefix(this@TelegramAccessibilityService)
+            val fullResult = "${prefix}${translated}"
+
+            mainHandler.post {
+                overlayManager?.showGlassPill(fullResult, targetMessage.top)
             }
-            overlayManager?.showTranslationPopup(results, isLoading = false)
-            onComplete?.invoke(results)
+            onComplete?.invoke(listOf(targetMessage.text to fullResult))
         }
     }
 
     private fun extractTextFromNode(
         node: AccessibilityNodeInfo?,
-        resultList: MutableList<String>
+        resultList: MutableList<ScannedItem>
     ) {
         if (node == null) return
 
         val text = node.text?.toString()?.trim()
         val desc = node.contentDescription?.toString()?.trim()
 
-        if (!text.isNullOrEmpty()) {
-            resultList.add(text)
-        } else if (!desc.isNullOrEmpty()) {
-            resultList.add(desc)
+        val raw = if (!text.isNullOrEmpty()) text else desc
+        if (!raw.isNullOrEmpty()) {
+            val rect = Rect()
+            node.getBoundsInScreen(rect)
+            if (rect.height() > 0 && rect.bottom > 0) {
+                resultList.add(ScannedItem(raw, rect.top, rect.bottom))
+            }
         }
 
         val childCount = node.childCount

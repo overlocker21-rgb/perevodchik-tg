@@ -8,7 +8,6 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.text.TextUtils
-import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -17,6 +16,7 @@ import com.translator.telegram.databinding.ActivityMainBinding
 import com.translator.telegram.service.OverlayService
 import com.translator.telegram.service.TelegramAccessibilityService
 import com.translator.telegram.translation.GoogleTranslateApi
+import com.translator.telegram.translation.TranslationRepository
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
@@ -29,6 +29,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         setupListeners()
+        loadPrefixSettings()
     }
 
     override fun onResume() {
@@ -37,7 +38,21 @@ class MainActivity : AppCompatActivity() {
         updateServiceButtonState()
     }
 
+    private fun loadPrefixSettings() {
+        val currentPrefix = TranslationRepository.getPrefix(this)
+        binding.etCustomPrefix.setText(currentPrefix)
+        binding.tvPreviewText.text = "${currentPrefix}Привет, как твои дела сегодня?"
+    }
+
     private fun setupListeners() {
+        // Save prefix button
+        binding.btnSavePrefix.setOnClickListener {
+            val newPrefix = binding.etCustomPrefix.text.toString()
+            TranslationRepository.setPrefix(this, newPrefix)
+            binding.tvPreviewText.text = "${newPrefix}Привет, как твои дела сегодня?"
+            Toast.makeText(this, "Префикс сохранён: $newPrefix", Toast.LENGTH_SHORT).show()
+        }
+
         // Overlay permission button
         binding.btnGrantOverlay.setOnClickListener {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -48,7 +63,7 @@ class MainActivity : AppCompatActivity() {
                     )
                     startActivity(intent)
                 } else {
-                    Toast.makeText(this, "Разрешение поверх окон уже предоставлено", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Разрешение поверх окон уже включено", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -80,12 +95,18 @@ class MainActivity : AppCompatActivity() {
                     action = OverlayService.ACTION_STOP
                 }
                 startService(stopIntent)
+                TelegramAccessibilityService.instance?.hideFloatingBubble()
             } else {
                 val startIntent = Intent(this, OverlayService::class.java).apply {
                     action = OverlayService.ACTION_START
                 }
-                ContextCompat.startForegroundService(this, startIntent)
-                Toast.makeText(this, "Плавающий значок запущен! Перейдите в Telegram", Toast.LENGTH_SHORT).show()
+                try {
+                    ContextCompat.startForegroundService(this, startIntent)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+                TelegramAccessibilityService.instance?.showFloatingBubble()
+                Toast.makeText(this, "Стеклянная кнопка запущена! Перейдите в Telegram", Toast.LENGTH_SHORT).show()
             }
 
             binding.root.postDelayed({ updateServiceButtonState() }, 300)
@@ -104,7 +125,8 @@ class MainActivity : AppCompatActivity() {
             lifecycleScope.launch {
                 val result = GoogleTranslateApi.translate(textToTranslate)
                 result.onSuccess { translated ->
-                    binding.tvTestResult.text = "Результат:\n$translated"
+                    val prefix = TranslationRepository.getPrefix(this@MainActivity)
+                    binding.tvTestResult.text = "${prefix}${translated}"
                 }.onFailure { error ->
                     binding.tvTestResult.text = "Ошибка: ${error.localizedMessage ?: "Сбой соединения"}"
                 }
@@ -140,10 +162,10 @@ class MainActivity : AppCompatActivity() {
     private fun updateServiceButtonState() {
         if (OverlayService.isRunning) {
             binding.btnToggleFloatingBubble.text = "Остановить переводчик"
-            binding.btnToggleFloatingBubble.setBackgroundColor(ContextCompat.getColor(this, R.color.error))
+            binding.btnToggleFloatingBubble.setBackgroundResource(R.drawable.bg_liquid_glass)
         } else {
-            binding.btnToggleFloatingBubble.text = "Запустить плавающую кнопку"
-            binding.btnToggleFloatingBubble.setBackgroundResource(R.drawable.bg_button)
+            binding.btnToggleFloatingBubble.text = "Запустить стеклянную кнопку"
+            binding.btnToggleFloatingBubble.setBackgroundResource(R.drawable.bg_glass_pill_button)
         }
     }
 

@@ -4,7 +4,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg_dark"
+    android:background="#0A0E17"
     android:fillViewport="true">
 
     <LinearLayout
@@ -13,266 +13,325 @@
         android:orientation="vertical"
         android:padding="20dp">
 
-        <!-- Header -->
+        <!-- Top Bar: Liquid Glass Header -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center_vertical"
             android:orientation="horizontal"
+            android:layout_marginTop="8dp"
             android:layout_marginBottom="24dp">
 
             <ImageView
                 android:layout_width="48dp"
                 android:layout_height="48dp"
-                android:background="@drawable/bg_bubble"
-                android:padding="10dp"
+                android:background="@drawable/bg_liquid_bubble"
+                android:padding="12dp"
                 android:src="@drawable/ic_translate"
-                app:tint="@color/white" />
+                app:tint="#64B5F6" />
 
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="16dp"
+                android:layout_marginStart="14dp"
                 android:layout_weight="1"
                 android:orientation="vertical">
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Telegram Translator"
-                    android:textColor="@color/white"
+                    android:text="Liquid Translator"
+                    android:textColor="#FFFFFF"
                     android:textSize="20sp"
                     android:textStyle="bold" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Переводчик поверх экрана диалогов"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="13sp" />
+                    android:text="Стеклянный переводчик для Telegram"
+                    android:textColor="#90A4AE"
+                    android:textSize="12sp" />
             </LinearLayout>
         </LinearLayout>
 
-        <!-- Permissions Card -->
-        <com.google.android.material.card.MaterialCardView
+        <!-- Permissions Card (Frosted Glass) -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
-            app:cardBackgroundColor="@color/bg_card"
-            app:cardCornerRadius="16dp"
-            app:strokeColor="@color/overlay_border"
-            app:strokeWidth="1dp">
+            android:background="@drawable/bg_glass_card"
+            android:orientation="vertical"
+            android:padding="18dp">
 
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="14dp"
+                android:text="Разрешения системы"
+                android:textColor="#FFFFFF"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <!-- Row 1: Overlay -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="16dp">
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:layout_marginBottom="12dp">
 
-                <TextView
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="1. Поверх других окон"
+                        android:textColor="#E0E6ED"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Для плавающей стеклянной плашки"
+                        android:textColor="#8090A0"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btnGrantOverlay"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="14dp"
-                    android:text="Необходимые разрешения"
-                    android:textColor="@color/white"
-                    android:textSize="16sp"
-                    android:textStyle="bold" />
-
-                <!-- Overlay Permission Row -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal"
-                    android:layout_marginBottom="12dp">
-
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="1. Поверх других окон"
-                            android:textColor="@color/text_primary"
-                            android:textSize="14sp"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Для плавающей кнопки и всплывающего перевода"
-                            android:textColor="@color/text_secondary"
-                            android:textSize="12sp" />
-                    </LinearLayout>
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnGrantOverlay"
-                        style="@style/Widget.Material3.Button.TonalButton"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Включить"
-                        android:textSize="12sp" />
-                </LinearLayout>
-
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:background="@color/overlay_border"
-                    android:layout_marginVertical="6dp"/>
-
-                <!-- Accessibility Permission Row -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="2. Спец. возможности"
-                            android:textColor="@color/text_primary"
-                            android:textSize="14sp"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Для считывания сообщений в Telegram"
-                            android:textColor="@color/text_secondary"
-                            android:textSize="12sp" />
-                    </LinearLayout>
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnGrantAccessibility"
-                        style="@style/Widget.Material3.Button.TonalButton"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Включить"
-                        android:textSize="12sp" />
-                </LinearLayout>
-
+                    android:layout_height="38dp"
+                    android:background="@drawable/bg_liquid_glass"
+                    android:text="Включить"
+                    android:textColor="#64B5F6"
+                    android:textSize="12sp" />
             </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
 
-        <!-- Main Action Button -->
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnToggleFloatingBubble"
-            android:layout_width="match_parent"
-            android:layout_height="54dp"
-            android:layout_marginBottom="20dp"
-            android:background="@drawable/bg_button"
-            android:text="Запустить плавающую кнопку"
-            android:textAllCaps="false"
-            android:textColor="@color/white"
-            android:textSize="16sp"
-            app:backgroundTint="@null"
-            app:icon="@drawable/ic_translate"
-            app:iconGravity="textStart"
-            app:iconTint="@color/white" />
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#1AFFFFFF"
+                android:layout_marginVertical="6dp" />
 
-        <!-- Translation Test Card -->
-        <com.google.android.material.card.MaterialCardView
+            <!-- Row 2: Accessibility -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="2. Спец. возможности"
+                        android:textColor="#E0E6ED"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Для чтения текста на экране Telegram"
+                        android:textColor="#8090A0"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btnGrantAccessibility"
+                    android:layout_width="wrap_content"
+                    android:layout_height="38dp"
+                    android:background="@drawable/bg_liquid_glass"
+                    android:text="Включить"
+                    android:textColor="#64B5F6"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <!-- Prefix Configuration Card -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="20dp"
-            app:cardBackgroundColor="@color/bg_card"
-            app:cardCornerRadius="16dp"
-            app:strokeColor="@color/overlay_border"
-            app:strokeWidth="1dp">
+            android:layout_marginBottom="16dp"
+            android:background="@drawable/bg_glass_card"
+            android:orientation="vertical"
+            android:padding="18dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Текст перед каждым переводом"
+                android:textColor="#FFFFFF"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:layout_marginBottom="10dp"
+                android:text="Этот префикс будет писаться перед переведённым сообщением"
+                android:textColor="#8090A0"
+                android:textSize="11sp" />
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="16dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="10dp"
-                    android:text="Тест онлайн-перевода"
-                    android:textColor="@color/white"
-                    android:textSize="16sp"
-                    android:textStyle="bold" />
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
                 <EditText
-                    android:id="@+id/etTestInput"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/bg_edit_text"
-                    android:hint="Hello! How are you doing today?"
-                    android:padding="12dp"
-                    android:textColor="@color/white"
-                    android:textColorHint="@color/text_secondary"
-                    android:textSize="14sp" />
+                    android:id="@+id/etCustomPrefix"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_liquid_glass"
+                    android:hint="чурка пишет: "
+                    android:paddingHorizontal="14dp"
+                    android:textColor="#FFFFFF"
+                    android:textColorHint="#607080"
+                    android:textSize="13sp" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnTestTranslate"
-                    style="@style/Widget.Material3.Button"
+                <Button
+                    android:id="@+id/btnSavePrefix"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="end"
-                    android:layout_marginTop="8dp"
-                    android:text="Проверить перевод"
-                    android:textColor="@color/white"
-                    app:backgroundTint="@color/primary" />
-
-                <TextView
-                    android:id="@+id/tvTestResult"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:background="@drawable/bg_edit_text"
-                    android:padding="12dp"
-                    android:text="Здесь появится результат перевода..."
-                    android:textColor="@color/accent"
-                    android:textSize="14sp" />
+                    android:layout_height="44dp"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_glass_pill_button"
+                    android:text="Сохранить"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp" />
             </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
+        </LinearLayout>
 
-        <!-- Instructions Card -->
-        <com.google.android.material.card.MaterialCardView
+        <!-- Main Action Button -->
+        <Button
+            android:id="@+id/btnToggleFloatingBubble"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginBottom="20dp"
+            android:background="@drawable/bg_glass_pill_button"
+            android:text="Запустить стеклянную кнопку"
+            android:textAllCaps="false"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <!-- Live Preview Glass Pill -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            app:cardBackgroundColor="@color/bg_card"
-            app:cardCornerRadius="16dp"
-            app:strokeColor="@color/overlay_border"
-            app:strokeWidth="1dp">
+            android:layout_marginBottom="16dp"
+            android:background="@drawable/bg_glass_card"
+            android:orientation="vertical"
+            android:padding="18dp">
 
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:text="Предпросмотр плашки (Liquid Glass)"
+                android:textColor="#FFFFFF"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <!-- Mockup pill inside preview -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="16dp">
+                android:layout_gravity="center_horizontal"
+                android:background="@drawable/bg_liquid_glass"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="14dp"
+                android:paddingVertical="10dp">
+
+                <ImageView
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:layout_marginEnd="8dp"
+                    android:src="@drawable/ic_translate"
+                    app:tint="#64B5F6" />
 
                 <TextView
-                    android:layout_width="wrap_content"
+                    android:id="@+id/tvPreviewText"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="8dp"
-                    android:text="Как пользоваться"
-                    android:textColor="@color/white"
-                    android:textSize="15sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:lineSpacingExtra="4dp"
-                    android:text="1. Предоставьте оба системных разрешения выше.\n2. Нажмите «Запустить плавающую кнопку» — на экране появится круглый значок перевода.\n3. Откройте Telegram и любой англоязычный диалог или канал.\n4. Нажмите на плавающую кнопку: приложение мгновенно считает сообщения на экране и покажет всплывающее окно с переводом на русский язык.\n5. Также при включенной службе спец. возможностей новые сообщения определяются автоматически."
-                    android:textColor="@color/text_secondary"
+                    android:layout_weight="1"
+                    android:text="чурка пишет: Привет, как твои дела сегодня?"
+                    android:textColor="#FFFFFF"
                     android:textSize="13sp" />
+
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:layout_marginStart="8dp"
+                    android:src="@drawable/ic_copy"
+                    app:tint="#B0BEC5" />
             </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
+        </LinearLayout>
+
+        <!-- Test Translation Card -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_glass_card"
+            android:orientation="vertical"
+            android:padding="18dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="10dp"
+                android:text="Тест онлайн-перевода"
+                android:textColor="#FFFFFF"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <EditText
+                android:id="@+id/etTestInput"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:background="@drawable/bg_liquid_glass"
+                android:hint="Hello my friend! How are you?"
+                android:paddingHorizontal="14dp"
+                android:textColor="#FFFFFF"
+                android:textColorHint="#607080"
+                android:textSize="13sp" />
+
+            <Button
+                android:id="@+id/btnTestTranslate"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:layout_gravity="end"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_glass_pill_button"
+                android:text="Перевести"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/tvTestResult"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_liquid_glass"
+                android:padding="12dp"
+                android:text="Здесь появится результат..."
+                android:textColor="#80D8FF"
+                android:textSize="13sp" />
+        </LinearLayout>
 
     </LinearLayout>
 </ScrollView>

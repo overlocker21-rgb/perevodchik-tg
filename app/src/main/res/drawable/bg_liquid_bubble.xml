@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <!-- Liquid glass gradient -->
+    <gradient
+        android:type="linear"
+        android:angle="135"
+        android:startColor="#E6243242"
+        android:centerColor="#CC182330"
+        android:endColor="#B3101824" />
+        
+    <!-- Specular rim highlight -->
+    <stroke
+        android:width="1.5dp"
+        android:color="#73FFFFFF" />
+        
+    <size
+        android:width="54dp"
+        android:height="54dp" />
+</shape>

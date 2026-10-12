@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <!-- Frosted liquid glass dark background (translucent deep tint) -->
+    <gradient
+        android:type="linear"
+        android:angle="135"
+        android:startColor="#E61A2433"
+        android:centerColor="#CC141D29"
+        android:endColor="#B30E151F" />
+    
+    <!-- Specular glass rim highlight border -->
+    <stroke
+        android:width="1.2dp"
+        android:color="#59FFFFFF" />
+        
+    <!-- Smooth capsule rounded corners (iOS Liquid Glass style) -->
+    <corners android:radius="26dp" />
+</shape>
