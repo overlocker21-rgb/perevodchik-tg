@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <!-- Active Liquid glass gradient with subtle cyan tint -->
+    <gradient
+        android:type="linear"
+        android:angle="135"
+        android:startColor="#F0183852"
+        android:centerColor="#E6102638"
+        android:endColor="#D90B1B29" />
+        
+    <!-- Glowing neon cyan rim highlight -->
+    <stroke
+        android:width="2.5dp"
+        android:color="#00E5FF" />
+        
+    <size
+        android:width="54dp"
+        android:height="54dp" />
+</shape>

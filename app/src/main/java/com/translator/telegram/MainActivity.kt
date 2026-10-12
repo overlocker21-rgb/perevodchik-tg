@@ -95,7 +95,6 @@ class MainActivity : AppCompatActivity() {
                     action = OverlayService.ACTION_STOP
                 }
                 startService(stopIntent)
-                TelegramAccessibilityService.instance?.hideFloatingBubble()
             } else {
                 val startIntent = Intent(this, OverlayService::class.java).apply {
                     action = OverlayService.ACTION_START
@@ -105,7 +104,6 @@ class MainActivity : AppCompatActivity() {
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
-                TelegramAccessibilityService.instance?.showFloatingBubble()
                 Toast.makeText(this, "Стеклянная кнопка запущена! Перейдите в Telegram", Toast.LENGTH_SHORT).show()
             }
 

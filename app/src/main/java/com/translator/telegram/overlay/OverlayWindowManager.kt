@@ -4,12 +4,12 @@ import android.annotation.SuppressLint
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.graphics.Color
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
-import android.util.DisplayMetrics
 import android.view.ContextThemeWrapper
 import android.view.Gravity
 import android.view.LayoutInflater
@@ -22,11 +22,23 @@ import android.widget.Toast
 import com.translator.telegram.R
 import kotlin.math.hypot
 
-class OverlayWindowManager(private val context: Context) {
+class OverlayWindowManager private constructor(private val appContext: Context) {
 
-    private val themedContext = ContextThemeWrapper(context, R.style.Theme_TelegramTranslator)
-    private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-    private val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    companion object {
+        @SuppressLint("StaticFieldLeak")
+        @Volatile
+        private var instance: OverlayWindowManager? = null
+
+        fun getInstance(context: Context): OverlayWindowManager {
+            return instance ?: synchronized(this) {
+                instance ?: OverlayWindowManager(context.applicationContext).also { instance = it }
+            }
+        }
+    }
+
+    private val themedContext = ContextThemeWrapper(appContext, R.style.Theme_TelegramTranslator)
+    private val windowManager = appContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+    private val clipboard = appContext.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     private val inflater = LayoutInflater.from(themedContext)
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -40,47 +52,74 @@ class OverlayWindowManager(private val context: Context) {
     private var autoDismissRunnable: Runnable? = null
 
     var onBubbleClickListener: (() -> Unit)? = null
+    var isBubbleActiveState: Boolean = false
+        private set
 
     /**
-     * Shows floating draggable liquid glass bubble button.
+     * Shows single floating draggable liquid glass bubble button.
      */
     @SuppressLint("ClickableViewAccessibility")
     fun showBubble() {
-        if (isBubbleAttached || !Settings.canDrawOverlays(context)) return
-
-        bubbleView = inflater.inflate(R.layout.overlay_bubble, null)
-
-        val displayMetrics = DisplayMetrics()
-        @Suppress("DEPRECATION")
-        windowManager.defaultDisplay.getMetrics(displayMetrics)
-        val screenWidth = displayMetrics.widthPixels
-
-        val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-        } else {
-            @Suppress("DEPRECATION")
-            WindowManager.LayoutParams.TYPE_PHONE
-        }
-
-        bubbleParams = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            layoutFlag,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            x = (screenWidth - 170).coerceAtLeast(20)
-            y = 400
-        }
-
-        setupBubbleTouchListener(bubbleView!!, bubbleParams!!, if (screenWidth > 0) screenWidth else 1080)
+        if (isBubbleAttached || !Settings.canDrawOverlays(appContext)) return
 
         try {
+            bubbleView = inflater.inflate(R.layout.overlay_bubble, null)
+
+            val displayMetrics = appContext.resources.displayMetrics
+            val screenWidth = displayMetrics.widthPixels
+
+            val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            } else {
+                @Suppress("DEPRECATION")
+                WindowManager.LayoutParams.TYPE_PHONE
+            }
+
+            bubbleParams = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                layoutFlag,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = Gravity.TOP or Gravity.START
+                x = (screenWidth - 170).coerceAtLeast(20)
+                y = 400
+            }
+
+            setupBubbleTouchListener(bubbleView!!, bubbleParams!!, if (screenWidth > 0) screenWidth else 1080)
+            updateBubbleVisuals()
+
             windowManager.addView(bubbleView, bubbleParams)
             isBubbleAttached = true
         } catch (e: Exception) {
             e.printStackTrace()
+        }
+    }
+
+    /**
+     * Updates bubble look to indicate whether Auto-Translate mode is ON or OFF.
+     */
+    fun updateBubbleState(isActive: Boolean) {
+        isBubbleActiveState = isActive
+        mainHandler.post {
+            updateBubbleVisuals()
+        }
+    }
+
+    private fun updateBubbleVisuals() {
+        val view = bubbleView ?: return
+        val btnBubble = view.findViewById<ImageView>(R.id.btnBubble) ?: return
+        val activeIndicator = view.findViewById<View>(R.id.bubbleActiveIndicator)
+
+        if (isBubbleActiveState) {
+            btnBubble.setBackgroundResource(R.drawable.bg_liquid_bubble_active)
+            btnBubble.setColorFilter(Color.parseColor("#00E5FF"))
+            activeIndicator?.visibility = View.VISIBLE
+        } else {
+            btnBubble.setBackgroundResource(R.drawable.bg_liquid_bubble)
+            btnBubble.setColorFilter(Color.parseColor("#F0F8FF"))
+            activeIndicator?.visibility = View.GONE
         }
     }
 
@@ -112,7 +151,7 @@ class OverlayWindowManager(private val context: Context) {
 
                     params.x = initialX + dx
                     params.y = initialY + dy
-                    if (isBubbleAttached) {
+                    if (isBubbleAttached && bubbleView != null) {
                         try {
                             windowManager.updateViewLayout(view, params)
                         } catch (e: Exception) {
@@ -134,7 +173,7 @@ class OverlayWindowManager(private val context: Context) {
                     } else {
                         // Snap bubble to nearest screen edge (left or right)
                         params.x = if (params.x < screenWidth / 2) 20 else (screenWidth - 170).coerceAtLeast(20)
-                        if (isBubbleAttached) {
+                        if (isBubbleAttached && bubbleView != null) {
                             try {
                                 windowManager.updateViewLayout(view, params)
                             } catch (e: Exception) {
@@ -156,10 +195,11 @@ class OverlayWindowManager(private val context: Context) {
         if (!isBubbleAttached || bubbleView == null) return
         try {
             windowManager.removeView(bubbleView)
-            isBubbleAttached = false
-            bubbleView = null
         } catch (e: Exception) {
             e.printStackTrace()
+        } finally {
+            isBubbleAttached = false
+            bubbleView = null
         }
     }
 
@@ -169,19 +209,32 @@ class OverlayWindowManager(private val context: Context) {
      */
     fun showGlassPill(
         fullText: String,
-        targetY: Int = 0
+        targetTop: Int = 0,
+        targetBottom: Int = 0
     ) {
-        if (!Settings.canDrawOverlays(context)) return
+        if (!Settings.canDrawOverlays(appContext)) return
 
-        // Hide previous pill if visible
-        hideGlassPill()
+        val displayMetrics = appContext.resources.displayMetrics
+        val screenHeight = displayMetrics.heightPixels
+        val density = displayMetrics.density
 
-        try {
-            pillView = inflater.inflate(R.layout.overlay_glass_pill, null)
-        } catch (e: Exception) {
-            e.printStackTrace()
-            Toast.makeText(context, fullText, Toast.LENGTH_LONG).show()
-            return
+        val estimatedPillHeight = (54 * density).toInt()
+        val margin = (10 * density).toInt()
+        val topBarLimit = (screenHeight * 0.08f).toInt()
+        val bottomLimit = (screenHeight * 0.90f).toInt()
+
+        // Calculate exact Y coordinate to place pill neatly above message
+        val yPos = if (targetTop > 0) {
+            val idealAbove = targetTop - estimatedPillHeight - margin
+            if (idealAbove >= topBarLimit) {
+                idealAbove
+            } else if (targetBottom > 0 && (targetBottom + margin + estimatedPillHeight) <= bottomLimit) {
+                targetBottom + margin // Put right below message if too close to top bar
+            } else {
+                topBarLimit + margin
+            }
+        } else {
+            (screenHeight - (280 * density).toInt()).coerceAtLeast(topBarLimit)
         }
 
         val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -191,12 +244,6 @@ class OverlayWindowManager(private val context: Context) {
             WindowManager.LayoutParams.TYPE_PHONE
         }
 
-        val displayMetrics = DisplayMetrics()
-        @Suppress("DEPRECATION")
-        windowManager.defaultDisplay.getMetrics(displayMetrics)
-        val screenHeight = displayMetrics.heightPixels
-
-        // Position pill directly above the message bounds or neatly centered
         val pillParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -205,11 +252,29 @@ class OverlayWindowManager(private val context: Context) {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.CENTER_HORIZONTAL or Gravity.TOP
-            y = when {
-                targetY > 200 -> (targetY - 140).coerceAtLeast(150)
-                targetY in 1..200 -> (targetY + 90)
-                else -> (screenHeight - 340).coerceAtLeast(200) // Near bottom above input bar
+            x = 0
+            y = yPos
+        }
+
+        // Smooth in-place update if pill is already on screen
+        if (isPillAttached && pillView != null) {
+            try {
+                val tvPillText = pillView?.findViewById<TextView>(R.id.tvPillText)
+                tvPillText?.text = fullText
+                windowManager.updateViewLayout(pillView, pillParams)
+                resetAutoDismiss()
+                return
+            } catch (e: Exception) {
+                hideGlassPill()
             }
+        }
+
+        try {
+            pillView = inflater.inflate(R.layout.overlay_glass_pill, null)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Toast.makeText(appContext, fullText, Toast.LENGTH_LONG).show()
+            return
         }
 
         val tvPillText = pillView?.findViewById<TextView>(R.id.tvPillText)
@@ -222,7 +287,7 @@ class OverlayWindowManager(private val context: Context) {
         btnCopy?.setOnClickListener {
             val clip = ClipData.newPlainText("Translated message", fullText)
             clipboard.setPrimaryClip(clip)
-            Toast.makeText(context, "Скопировано!", Toast.LENGTH_SHORT).show()
+            Toast.makeText(appContext, "Скопировано!", Toast.LENGTH_SHORT).show()
         }
 
         // Tap on close icon
@@ -230,26 +295,27 @@ class OverlayWindowManager(private val context: Context) {
             hideGlassPill()
         }
 
-        // Tap anywhere on the pill to copy & dismiss
+        // Tap anywhere on the pill body to copy & dismiss
         pillView?.setOnClickListener {
             val clip = ClipData.newPlainText("Translated message", fullText)
             clipboard.setPrimaryClip(clip)
-            Toast.makeText(context, "Скопировано!", Toast.LENGTH_SHORT).show()
+            Toast.makeText(appContext, "Скопировано!", Toast.LENGTH_SHORT).show()
             hideGlassPill()
         }
 
         try {
             windowManager.addView(pillView, pillParams)
             isPillAttached = true
-
-            // Auto-dismiss pill after 9 seconds so it doesn't clutter the screen
-            autoDismissRunnable?.let { mainHandler.removeCallbacks(it) }
-            autoDismissRunnable = Runnable { hideGlassPill() }
-            mainHandler.postDelayed(autoDismissRunnable!!, 9000)
-
+            resetAutoDismiss()
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+    private fun resetAutoDismiss() {
+        autoDismissRunnable?.let { mainHandler.removeCallbacks(it) }
+        autoDismissRunnable = Runnable { hideGlassPill() }
+        mainHandler.postDelayed(autoDismissRunnable!!, 12000)
     }
 
     /**
@@ -260,26 +326,14 @@ class OverlayWindowManager(private val context: Context) {
         if (!isPillAttached || pillView == null) return
         try {
             windowManager.removeView(pillView)
-            isPillAttached = false
-            pillView = null
         } catch (e: Exception) {
             e.printStackTrace()
+        } finally {
+            isPillAttached = false
+            pillView = null
         }
     }
 
-    // Backwards compatibility alias
-    fun showTranslationPopup(translations: List<Pair<String, String>>, isLoading: Boolean = false) {
-        if (isLoading) {
-            Toast.makeText(context, "Сканирую экран Telegram...", Toast.LENGTH_SHORT).show()
-        } else if (translations.isNotEmpty()) {
-            val first = translations.first().second
-            showGlassPill(first)
-        }
-    }
-
-    fun hideTranslationPopup() {
-        hideGlassPill()
-    }
-
+    fun isPillVisible(): Boolean = isPillAttached
     fun isBubbleVisible(): Boolean = isBubbleAttached
 }

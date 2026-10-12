@@ -9,14 +9,13 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import com.translator.telegram.MainActivity
 import com.translator.telegram.R
 import com.translator.telegram.overlay.OverlayWindowManager
 
 class OverlayService : Service() {
-
-    private var overlayManager: OverlayWindowManager? = null
 
     companion object {
         private const val CHANNEL_ID = "translator_overlay_channel"
@@ -31,26 +30,17 @@ class OverlayService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        overlayManager = OverlayWindowManager(this).apply {
-            onBubbleClickListener = {
-                val accessibilityService = TelegramAccessibilityService.instance
-                if (accessibilityService != null) {
-                    // Show loading popup immediately
-                    showTranslationPopup(emptyList(), isLoading = true)
-                    
-                    // Scan Telegram screen and display results
-                    accessibilityService.scanAndTranslateCurrentScreen { results ->
-                        showTranslationPopup(results, isLoading = false)
-                    }
-                } else {
-                    showTranslationPopup(
-                        listOf(
-                            "Служба спец. возможностей выключена" to
-                            "Включите «TG Translator Overlay» в системных настройках спец. возможностей."
-                        ),
-                        isLoading = false
-                    )
-                }
+        val overlay = OverlayWindowManager.getInstance(this)
+        overlay.onBubbleClickListener = {
+            val accessibilityService = TelegramAccessibilityService.instance
+            if (accessibilityService != null) {
+                accessibilityService.toggleAutoTranslate()
+            } else {
+                Toast.makeText(
+                    this,
+                    "Включите «TG Translator Overlay» в спец. возможностях Android",
+                    Toast.LENGTH_LONG
+                ).show()
             }
         }
     }
@@ -68,7 +58,7 @@ class OverlayService : Service() {
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
-                overlayManager?.showBubble()
+                OverlayWindowManager.getInstance(this).showBubble()
                 isRunning = true
             }
         }
@@ -77,9 +67,10 @@ class OverlayService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        overlayManager?.hideBubble()
-        overlayManager?.hideTranslationPopup()
-        overlayManager = null
+        val overlay = OverlayWindowManager.getInstance(this)
+        overlay.hideBubble()
+        overlay.hideGlassPill()
+        overlay.updateBubbleState(false)
         isRunning = false
     }
 
@@ -109,7 +100,7 @@ class OverlayService : Service() {
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Плавающий переводчик активен")
-            .setContentText("Нажмите на значок на экране для перевода")
+            .setContentText("Нажмите на значок для включения/выключения автоперевода")
             .setSmallIcon(R.drawable.ic_translate)
             .setContentIntent(pendingIntent)
             .setOngoing(true)

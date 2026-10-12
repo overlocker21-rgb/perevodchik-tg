@@ -6,7 +6,6 @@ import android.os.Handler
 import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
-import android.view.accessibility.AccessibilityWindowInfo
 import android.widget.Toast
 import com.translator.telegram.overlay.OverlayWindowManager
 import com.translator.telegram.translation.TranslationRepository
@@ -14,12 +13,25 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 class TelegramAccessibilityService : AccessibilityService() {
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
     private val mainHandler = Handler(Looper.getMainLooper())
-    private var overlayManager: OverlayWindowManager? = null
+    private val debounceHandler = Handler(Looper.getMainLooper())
+
+    var isAutoTranslateActive: Boolean = false
+        private set
+
+    private var currentMessageText: String? = null
+    private var currentMessageTop: Int = 0
+
+    private val autoScanRunnable = Runnable {
+        if (isAutoTranslateActive) {
+            scanAndTranslateLowestVisibleMessage()
+        }
+    }
 
     data class ScannedItem(
         val text: String,
@@ -33,84 +45,134 @@ class TelegramAccessibilityService : AccessibilityService() {
 
         val isRunning: Boolean
             get() = instance != null
+
+        private val IGNORED_SYSTEM_WORDS = hashSetOf(
+            "message", "сообщение", "comment", "комментарий", "reply", "ответить",
+            "forward", "переслать", "broadcast", "voice message", "голосовое сообщение",
+            "video message", "видеосообщение", "send", "отправить", "attach", "прикрепить",
+            "mute", "unmute", "join", "discuss", "pinned message", "закрепленное сообщение",
+            "online", "в сети", "last seen", "был(а) недавно", "typing...", "печатает...",
+            "connecting...", "соединение...", "yesterday", "вчера", "today", "сегодня",
+            "stickers", "стикеры", "emoji", "эмодзи", "gif", "edit", "изменить", "cancel", "отмена"
+        )
     }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
-        overlayManager = OverlayWindowManager(this)
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
+    /**
+     * Toggles auto-translation mode on or off.
+     * Called whenever the floating glass bubble button is tapped.
+     */
+    fun toggleAutoTranslate() {
+        isAutoTranslateActive = !isAutoTranslateActive
+        val overlay = OverlayWindowManager.getInstance(this)
+        overlay.updateBubbleState(isAutoTranslateActive)
+
+        if (isAutoTranslateActive) {
+            Toast.makeText(this, "Режим автоперевода: ВКЛ", Toast.LENGTH_SHORT).show()
+            currentMessageText = null
+            currentMessageTop = 0
+            // Immediately scan the current screen
+            debounceHandler.removeCallbacks(autoScanRunnable)
+            debounceHandler.postDelayed(autoScanRunnable, 100)
+        } else {
+            Toast.makeText(this, "Режим автоперевода: ВЫКЛ", Toast.LENGTH_SHORT).show()
+            debounceHandler.removeCallbacks(autoScanRunnable)
+            currentMessageText = null
+            currentMessageTop = 0
+            overlay.hideGlassPill()
+        }
+    }
+
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        if (!isAutoTranslateActive) return
+        val eventPackage = event?.packageName?.toString() ?: return
+
+        // Skip events from our own application overlay
+        if (eventPackage == packageName) return
+
+        // Only listen for events from Telegram or compatible messengers
+        val isChatApp = eventPackage.contains("telegram", ignoreCase = true) ||
+                        eventPackage.contains("challegram", ignoreCase = true) ||
+                        eventPackage.contains("nekox", ignoreCase = true) ||
+                        eventPackage.contains("messenger", ignoreCase = true)
+
+        if (!isChatApp) return
+
+        // Debounce events (when user scrolls or stops scrolling, settle in 350ms)
+        debounceHandler.removeCallbacks(autoScanRunnable)
+        debounceHandler.postDelayed(autoScanRunnable, 350)
+    }
 
     override fun onInterrupt() {}
 
     override fun onDestroy() {
         super.onDestroy()
         instance = null
-        overlayManager?.hideBubble()
-        overlayManager?.hideGlassPill()
-        overlayManager = null
-    }
-
-    fun showFloatingBubble() {
-        overlayManager?.showBubble()
-    }
-
-    fun hideFloatingBubble() {
-        overlayManager?.hideBubble()
-        overlayManager?.hideGlassPill()
+        debounceHandler.removeCallbacks(autoScanRunnable)
+        OverlayWindowManager.getInstance(this).apply {
+            updateBubbleState(false)
+            hideGlassPill()
+        }
     }
 
     /**
-     * Finds the latest foreign message on screen and shows a compact
-     * Liquid Glass pill right above it with the custom prefix.
+     * Scans active screen, dynamically detects input box boundary,
+     * finds the lowest (bottom-most) foreign message currently visible on screen,
+     * and shows the translation pill directly above it.
      */
-    fun scanAndTranslateCurrentScreen(onComplete: ((List<Pair<String, String>>) -> Unit)? = null) {
-        if (overlayManager == null) {
-            overlayManager = OverlayWindowManager(this)
-        }
+    fun scanAndTranslateLowestVisibleMessage() {
+        val rootNode = rootInActiveWindow ?: return
+
+        val displayMetrics = resources.displayMetrics
+        val screenHeight = displayMetrics.heightPixels
+        val density = displayMetrics.density
+        val topLimit = (screenHeight * 0.08f).toInt()
+        val defaultBottomLimit = (screenHeight * 0.90f).toInt()
+
+        // Dynamically find where the input bar begins so we never scan input text/hints
+        val inputBarTop = findInputBarTop(rootNode, defaultBottomLimit)
+        val bottomLimit = (inputBarTop - (4 * density).toInt()).coerceAtMost(defaultBottomLimit)
 
         val items = mutableListOf<ScannedItem>()
-
-        // 1. Scan root in active window
-        rootInActiveWindow?.let { extractTextFromNode(it, items) }
-
-        // 2. Also scan accessible windows
-        try {
-            for (window in windows) {
-                if (window.type == AccessibilityWindowInfo.TYPE_APPLICATION) {
-                    window.root?.let { extractTextFromNode(it, items) }
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        extractTextFromNode(rootNode, items, topLimit, bottomLimit)
 
         val validItems = items
             .map { ScannedItem(it.text.trim(), it.top, it.bottom) }
-            .filter { it.text.length >= 2 && !isTimestampOrTime(it.text) }
+            .filter { isValidMessageText(it.text) }
 
-        if (validItems.isEmpty()) {
-            mainHandler.post {
-                Toast.makeText(this, "Сообщения на экране не найдены", Toast.LENGTH_SHORT).show()
-            }
-            onComplete?.invoke(emptyList())
-            return
-        }
+        if (validItems.isEmpty()) return
 
+        // Filter out Russian messages
         val foreignItems = validItems.filter { !TranslationRepository.isAlreadyRussian(it.text) }
 
+        val overlay = OverlayWindowManager.getInstance(this)
+
         if (foreignItems.isEmpty()) {
-            mainHandler.post {
-                overlayManager?.showGlassPill("Все сообщения на русском")
-            }
-            onComplete?.invoke(listOf("Все сообщения на русском" to "На экране нет иностранного текста"))
+            // All currently visible messages are Russian — hide the pill
+            overlay.hideGlassPill()
+            currentMessageText = null
+            currentMessageTop = 0
             return
         }
 
-        // Pick the latest (lowest on screen) foreign message
-        val targetMessage = foreignItems.maxByOrNull { it.bottom } ?: foreignItems.last()
+        // Pick the lowest (bottom-most) foreign message visible on screen right now
+        val targetMessage = foreignItems.maxByOrNull { it.bottom } ?: return
+
+        val isPillVisible = overlay.isPillVisible()
+        val hasTextChanged = targetMessage.text != currentMessageText
+        val hasMoved = abs(targetMessage.top - currentMessageTop) > 35
+
+        // If pill is visible, text hasn't changed and position hasn't moved, do nothing
+        if (!hasTextChanged && isPillVisible && !hasMoved) {
+            return
+        }
+
+        currentMessageText = targetMessage.text
+        currentMessageTop = targetMessage.top
 
         serviceScope.launch {
             val translated = TranslationRepository.translate(targetMessage.text)
@@ -118,26 +180,65 @@ class TelegramAccessibilityService : AccessibilityService() {
             val fullResult = "${prefix}${translated}"
 
             mainHandler.post {
-                overlayManager?.showGlassPill(fullResult, targetMessage.top)
+                if (isAutoTranslateActive) {
+                    overlay.showGlassPill(fullResult, targetMessage.top, targetMessage.bottom)
+                }
             }
-            onComplete?.invoke(listOf(targetMessage.text to fullResult))
         }
+    }
+
+    /**
+     * Traverses the node tree to locate the top edge of any input field / EditText.
+     */
+    private fun findInputBarTop(root: AccessibilityNodeInfo, defaultBottom: Int): Int {
+        var minInputTop = defaultBottom
+        fun scan(node: AccessibilityNodeInfo?) {
+            if (node == null) return
+            if (node.isEditable || node.className?.toString()?.contains("EditText", ignoreCase = true) == true) {
+                val rect = Rect()
+                node.getBoundsInScreen(rect)
+                if (rect.top in 1 until minInputTop) {
+                    minInputTop = rect.top
+                }
+            }
+            val count = node.childCount
+            for (i in 0 until count) {
+                val child = node.getChild(i) ?: continue
+                scan(child)
+                try { child.recycle() } catch (e: Exception) {}
+            }
+        }
+        scan(root)
+        return minInputTop
     }
 
     private fun extractTextFromNode(
         node: AccessibilityNodeInfo?,
-        resultList: MutableList<ScannedItem>
+        resultList: MutableList<ScannedItem>,
+        topLimit: Int,
+        bottomLimit: Int
     ) {
         if (node == null) return
 
+        // Ignore editable input boxes
+        if (node.isEditable || node.className?.toString()?.contains("EditText", ignoreCase = true) == true) {
+            return
+        }
+
+        // Ignore our own overlay window
+        if (node.packageName?.toString() == packageName) {
+            return
+        }
+
         val text = node.text?.toString()?.trim()
         val desc = node.contentDescription?.toString()?.trim()
-
         val raw = if (!text.isNullOrEmpty()) text else desc
+
         if (!raw.isNullOrEmpty()) {
             val rect = Rect()
             node.getBoundsInScreen(rect)
-            if (rect.height() > 0 && rect.bottom > 0) {
+            // Message must be strictly inside the chat area (between top bar and bottom input)
+            if (rect.height() > 0 && rect.bottom > 0 && rect.top >= topLimit && rect.bottom <= bottomLimit) {
                 resultList.add(ScannedItem(raw, rect.top, rect.bottom))
             }
         }
@@ -146,7 +247,7 @@ class TelegramAccessibilityService : AccessibilityService() {
         for (i in 0 until childCount) {
             val child = node.getChild(i)
             if (child != null) {
-                extractTextFromNode(child, resultList)
+                extractTextFromNode(child, resultList, topLimit, bottomLimit)
                 try {
                     child.recycle()
                 } catch (e: Exception) {}
@@ -154,8 +255,24 @@ class TelegramAccessibilityService : AccessibilityService() {
         }
     }
 
+    private fun isValidMessageText(text: String): Boolean {
+        if (text.length < 2) return false
+        val lower = text.lowercase()
+        if (IGNORED_SYSTEM_WORDS.contains(lower)) return false
+        if (isTimestampOrTime(text)) return false
+        // Exclude pure numbers / counters / status icons
+        val clean = text.replace("✓", "").replace("✔", "").trim()
+        if (clean.isEmpty() || clean.all { it.isDigit() || it == '.' || it == ':' || it == 'k' || it == 'K' }) {
+            return false
+        }
+        return true
+    }
+
     private fun isTimestampOrTime(text: String): Boolean {
+        val clean = text.replace("✓", "").replace("✔", "").trim()
         val timeRegex = Regex("^\\d{1,2}:\\d{2}(\\s?(AM|PM|am|pm))?$")
-        return timeRegex.matches(text) || text.all { it.isDigit() || it == ':' || it == '.' }
+        if (timeRegex.matches(clean)) return true
+        if (clean.all { it.isDigit() || it == ':' || it == '.' || it == ' ' || it == '/' || it == '-' }) return true
+        return false
     }
 }

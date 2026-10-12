@@ -19,4 +19,16 @@
         android:src="@drawable/ic_translate"
         app:tint="#F0F8FF" />
 
+    <!-- Active Indicator Dot (Neon Cyan glow when auto-translate is ON) -->
+    <View
+        android:id="@+id/bubbleActiveIndicator"
+        android:layout_width="12dp"
+        android:layout_height="12dp"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="2dp"
+        android:layout_marginEnd="2dp"
+        android:background="@drawable/bg_active_dot"
+        android:elevation="14dp"
+        android:visibility="gone" />
+
 </FrameLayout>
