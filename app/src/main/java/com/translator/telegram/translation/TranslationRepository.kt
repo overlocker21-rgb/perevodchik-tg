@@ -35,8 +35,13 @@ object TranslationRepository {
         val totalLetters = text.count { it.isLetter() }
         if (totalLetters == 0) return true // Only numbers/symbols, don't translate
         val cyrillicLetters = text.count { cyrillicRegex.matches(it.toString()) }
-        // If more than 40% of characters are Cyrillic, consider it already Russian
-        return (cyrillicLetters.toFloat() / totalLetters.toFloat()) > 0.4f
+        val latinLetters = text.count { it in 'a'..'z' || it in 'A'..'Z' }
+        
+        // If it contains Latin letters and no Cyrillic, it's definitely foreign!
+        if (latinLetters > 0 && cyrillicLetters == 0) return false
+
+        // If more than 60% of characters are Cyrillic, consider it already Russian
+        return (cyrillicLetters.toFloat() / totalLetters.toFloat()) > 0.6f
     }
 
     /**

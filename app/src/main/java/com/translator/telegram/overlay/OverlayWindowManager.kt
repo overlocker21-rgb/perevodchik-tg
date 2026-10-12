@@ -17,6 +17,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.ImageView
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import com.translator.telegram.R
@@ -205,12 +206,13 @@ class OverlayWindowManager private constructor(private val appContext: Context) 
 
     /**
      * Shows a compact liquid glass floating pill directly above the message.
-     * iOS 26 / Liquid Glass style.
+     * Supports loading state and elevated Y coordinate to avoid overlapping the message.
      */
     fun showGlassPill(
         fullText: String,
         targetTop: Int = 0,
-        targetBottom: Int = 0
+        targetBottom: Int = 0,
+        isLoading: Boolean = false
     ) {
         if (!Settings.canDrawOverlays(appContext)) return
 
@@ -218,20 +220,20 @@ class OverlayWindowManager private constructor(private val appContext: Context) 
         val screenHeight = displayMetrics.heightPixels
         val density = displayMetrics.density
 
-        val estimatedPillHeight = (54 * density).toInt()
-        val margin = (10 * density).toInt()
+        // Ample vertical clearance so pill floats clearly ABOVE the message without covering it
+        val estimatedPillHeight = (80 * density).toInt()
+        val gapAboveMessage = (18 * density).toInt()
         val topBarLimit = (screenHeight * 0.08f).toInt()
         val bottomLimit = (screenHeight * 0.90f).toInt()
 
-        // Calculate exact Y coordinate to place pill neatly above message
         val yPos = if (targetTop > 0) {
-            val idealAbove = targetTop - estimatedPillHeight - margin
+            val idealAbove = targetTop - estimatedPillHeight - gapAboveMessage
             if (idealAbove >= topBarLimit) {
                 idealAbove
-            } else if (targetBottom > 0 && (targetBottom + margin + estimatedPillHeight) <= bottomLimit) {
-                targetBottom + margin // Put right below message if too close to top bar
+            } else if (targetBottom > 0 && (targetBottom + gapAboveMessage + estimatedPillHeight) <= bottomLimit) {
+                targetBottom + gapAboveMessage // Below message if too close to top bar
             } else {
-                topBarLimit + margin
+                topBarLimit + (6 * density).toInt()
             }
         } else {
             (screenHeight - (280 * density).toInt()).coerceAtLeast(topBarLimit)
@@ -259,10 +261,9 @@ class OverlayWindowManager private constructor(private val appContext: Context) 
         // Smooth in-place update if pill is already on screen
         if (isPillAttached && pillView != null) {
             try {
-                val tvPillText = pillView?.findViewById<TextView>(R.id.tvPillText)
-                tvPillText?.text = fullText
+                updatePillContent(pillView!!, fullText, isLoading)
                 windowManager.updateViewLayout(pillView, pillParams)
-                resetAutoDismiss()
+                if (!isLoading) resetAutoDismiss()
                 return
             } catch (e: Exception) {
                 hideGlassPill()
@@ -273,49 +274,70 @@ class OverlayWindowManager private constructor(private val appContext: Context) 
             pillView = inflater.inflate(R.layout.overlay_glass_pill, null)
         } catch (e: Exception) {
             e.printStackTrace()
-            Toast.makeText(appContext, fullText, Toast.LENGTH_LONG).show()
+            if (!isLoading) Toast.makeText(appContext, fullText, Toast.LENGTH_LONG).show()
             return
         }
 
-        val tvPillText = pillView?.findViewById<TextView>(R.id.tvPillText)
+        updatePillContent(pillView!!, fullText, isLoading)
+
         val btnCopy = pillView?.findViewById<ImageView>(R.id.btnPillCopy)
         val btnClose = pillView?.findViewById<ImageView>(R.id.btnPillClose)
 
-        tvPillText?.text = fullText
-
-        // Tap on copy icon
         btnCopy?.setOnClickListener {
-            val clip = ClipData.newPlainText("Translated message", fullText)
-            clipboard.setPrimaryClip(clip)
-            Toast.makeText(appContext, "Скопировано!", Toast.LENGTH_SHORT).show()
+            if (!isLoading) {
+                val clip = ClipData.newPlainText("Translated message", fullText)
+                clipboard.setPrimaryClip(clip)
+                Toast.makeText(appContext, "Скопировано!", Toast.LENGTH_SHORT).show()
+            }
         }
 
-        // Tap on close icon
         btnClose?.setOnClickListener {
             hideGlassPill()
         }
 
-        // Tap anywhere on the pill body to copy & dismiss
         pillView?.setOnClickListener {
-            val clip = ClipData.newPlainText("Translated message", fullText)
-            clipboard.setPrimaryClip(clip)
-            Toast.makeText(appContext, "Скопировано!", Toast.LENGTH_SHORT).show()
-            hideGlassPill()
+            if (!isLoading) {
+                val clip = ClipData.newPlainText("Translated message", fullText)
+                clipboard.setPrimaryClip(clip)
+                Toast.makeText(appContext, "Скопировано!", Toast.LENGTH_SHORT).show()
+                hideGlassPill()
+            }
         }
 
         try {
             windowManager.addView(pillView, pillParams)
             isPillAttached = true
-            resetAutoDismiss()
+            if (!isLoading) resetAutoDismiss()
         } catch (e: Exception) {
             e.printStackTrace()
+        }
+    }
+
+    private fun updatePillContent(view: View, text: String, isLoading: Boolean) {
+        val tvPillText = view.findViewById<TextView>(R.id.tvPillText)
+        val ivPillIcon = view.findViewById<ImageView>(R.id.ivPillIcon)
+        val pillProgressBar = view.findViewById<ProgressBar>(R.id.pillProgressBar)
+        val btnCopy = view.findViewById<ImageView>(R.id.btnPillCopy)
+
+        if (isLoading) {
+            pillProgressBar?.visibility = View.VISIBLE
+            ivPillIcon?.visibility = View.GONE
+            tvPillText?.text = "Перевожу..."
+            tvPillText?.setTextColor(Color.parseColor("#80FFFFFF"))
+            btnCopy?.visibility = View.GONE
+        } else {
+            pillProgressBar?.visibility = View.GONE
+            ivPillIcon?.visibility = View.VISIBLE
+            tvPillText?.text = text
+            tvPillText?.setTextColor(Color.parseColor("#FFFFFF"))
+            btnCopy?.visibility = View.VISIBLE
         }
     }
 
     private fun resetAutoDismiss() {
         autoDismissRunnable?.let { mainHandler.removeCallbacks(it) }
         autoDismissRunnable = Runnable { hideGlassPill() }
-        mainHandler.postDelayed(autoDismissRunnable!!, 12000)
+        mainHandler.postDelayed(autoDismissRunnable!!, 14000)
     }
 
     /**

@@ -8,33 +8,52 @@
     android:background="@drawable/bg_liquid_glass"
     android:elevation="14dp"
     android:gravity="center_vertical"
-    android:maxWidth="340dp"
+    android:maxWidth="360dp"
     android:orientation="horizontal"
     android:paddingStart="14dp"
     android:paddingTop="9dp"
     android:paddingEnd="12dp"
     android:paddingBottom="9dp">
 
-    <!-- Mini Glass Icon -->
+    <!-- Mini Glass Translate Icon -->
     <ImageView
+        android:id="@+id/ivPillIcon"
         android:layout_width="18dp"
         android:layout_height="18dp"
         android:layout_marginEnd="8dp"
         android:src="@drawable/ic_translate"
-        app:tint="#64B5F6" />
+        app:tint="#00E5FF" />
 
-    <!-- Translated Text Block -->
-    <TextView
-        android:id="@+id/tvPillText"
+    <!-- Mini Loading Indicator (when fetching translation) -->
+    <ProgressBar
+        android:id="@+id/pillProgressBar"
+        android:layout_width="18dp"
+        android:layout_height="18dp"
+        android:layout_marginEnd="8dp"
+        android:indeterminate="true"
+        android:indeterminateTint="#00E5FF"
+        android:visibility="gone" />
+
+    <!-- Translated Text Block with Full Text Scrolling -->
+    <ScrollView
+        android:id="@+id/pillScrollView"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:ellipsize="end"
-        android:maxLines="4"
-        android:text="Перевод..."
-        android:textColor="#FFFFFF"
-        android:textSize="13sp"
-        android:textStyle="normal" />
+        android:scrollbars="none"
+        android:fadingEdge="vertical"
+        android:fadingEdgeLength="8dp">
+
+        <TextView
+            android:id="@+id/tvPillText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:lineSpacingExtra="2dp"
+            android:text="Перевод..."
+            android:textColor="#FFFFFF"
+            android:textSize="13sp"
+            android:textStyle="normal" />
+    </ScrollView>
 
     <!-- Action: Copy to clipboard -->
     <ImageView
