@@ -30,9 +30,13 @@ class TelegramAccessibilityService : AccessibilityService() {
         overlayManager = OverlayWindowManager(this)
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        // Can be used for event-based hooks if needed
+    }
 
-    override fun onInterrupt() {}
+    override fun onInterrupt() {
+        // Handle interruption
+    }
 
     override fun onDestroy() {
         super.onDestroy()
@@ -51,22 +55,28 @@ class TelegramAccessibilityService : AccessibilityService() {
         overlayManager?.hideTranslationPopup()
     }
 
+    /**
+     * Scans currently visible screen content in Telegram, extracts messages from both
+     * text and contentDescription properties, translates foreign ones, and returns results.
+     */
     fun scanAndTranslateCurrentScreen(onComplete: (List<Pair<String, String>>) -> Unit) {
         val rootNode = rootInActiveWindow
             ?: windows.firstOrNull { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }?.root
 
         if (rootNode == null) {
-            onComplete(listOf("Экран недоступен" to "Откройте чат Telegram на экране."))
+            onComplete(listOf("Экран недоступен" to "Попробуйте ещё раз, когда чат Telegram открыт на экране."))
             return
         }
 
         val extractedTexts = mutableListOf<String>()
         extractTextFromNode(rootNode, extractedTexts)
 
+        // Clean and filter candidate texts
         val candidates = extractedTexts
             .map { it.trim() }
             .filter { text ->
-                text.length >= 2 && !isTimestampOrTime(text)
+                text.length >= 2 &&
+                !isTimestampOrTime(text)
             }
             .distinct()
 
@@ -75,12 +85,13 @@ class TelegramAccessibilityService : AccessibilityService() {
             return
         }
 
+        // Filter out texts that are already in Russian
         val foreignTexts = candidates.filter { text ->
             !TranslationRepository.isAlreadyRussian(text)
         }
 
         if (foreignTexts.isEmpty()) {
-            onComplete(listOf("Все сообщения на русском" to "На текущем экране нет сообщений на иностранном языке."))
+            onComplete(listOf("Все сообщения на русском" to "На текущем экране нет сообщений на иностранном языке для перевода."))
             return
         }
 
@@ -115,7 +126,9 @@ class TelegramAccessibilityService : AccessibilityService() {
                 extractTextFromNode(child, resultList)
                 try {
                     child.recycle()
-                } catch (e: Exception) {}
+                } catch (e: Exception) {
+                    // Ignore recycle errors
+                }
             }
         }
     }
